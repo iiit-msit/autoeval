@@ -131,6 +131,7 @@ def run_tests(inputs,outputs,extension):
             print(result[2]+"\n")
         print("----------------------------------------")
     print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
+    return (passed, len(inputs))
 
 inputs = []
 outputs = []
@@ -153,7 +154,7 @@ if not check_if_repo():
 
 if not check_if_user():
     raise Exception('user not logged in')
-    
+
 inputs = sorted(inputs)
 outputs = sorted(outputs)
 
@@ -161,18 +162,26 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
     if sys.argv[1].endswith(".java"):
         program_name = sys.argv[1]
         extension = ".java"
-        run_tests(inputs,outputs,extension)
+        result = run_tests(inputs,outputs,extension)
+
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
         extension = ".py"
-        run_tests(inputs,outputs,extension)
+        result = run_tests(inputs,outputs,extension)
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         extension = ".c"
-        run_tests(inputs,outputs,extension)
+        result = run_tests(inputs,outputs,extension)
     elif sys.argv[1] == "eval.py":
         print("eval.py cannot be passed as argument")
     else:
         print("Invalid Extension.\nPass only .java or .py files")
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
+
+cases, totalcases = result
+score, totalscore = runProcess("pylint Solution.py","Your code has been rated at (.*)/(.*) \(.*\)")
+path = os.getcwd().split('\\')
+msg = path[-3] +' '+ path[-1]
+runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
+runProcess("git push -u origin master")
