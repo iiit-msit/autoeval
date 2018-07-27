@@ -43,8 +43,15 @@ def submit_score(score_obj):
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
     """
-    r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
-    print(r.status_code, r.reason)
+    try:
+        r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
+        if r.status_code == 200:
+            print("A version of your code is submitted along with score.")
+        else:
+            print("Something is not right with server. Report this error to incharge.")
+    except Exception as e:
+        print("Warning: Cannot submit your code to the server. Check internet connection.")
+        pass
     return score_obj
 
 def runProcess(command, expr=None):
