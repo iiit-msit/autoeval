@@ -34,8 +34,15 @@ def check_if_repo():
 def check_if_user():
     run_proc = subprocess.Popen('git config user.name', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = run_proc.communicate()
-    if stdout: return True
+    if stdout: return str(stdout)
     return False
+
+def submit_score(score_obj):
+    """ Take a score object and submit it to an endpoint
+        kwargs:
+        score object -- (<problemid>,<user.name>,<score>)
+    """
+    return score_obj
 
 def runProcess(command, expr=None):
     run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
@@ -111,6 +118,7 @@ def run_test(testcase_input,testcase_output):
 
 def run_tests(inputs,outputs,extension):
     passed = 0
+    problemid = get_content("md5/problem_id.txt")
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
         if result == False:
@@ -131,7 +139,7 @@ def run_tests(inputs,outputs,extension):
             print(result[2]+"\n")
         print("----------------------------------------")
     print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
-    return (passed, len(inputs))
+    return (problemid, passed, len(inputs))
 
 inputs = []
 outputs = []
@@ -179,9 +187,10 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
-cases, totalcases = result
+problemid, cases, totalcases = result
 score, totalscore = runProcess("pylint Solution.py","Your code has been rated at (.*)/(.*) \(.*\)")
 path = os.getcwd().split('\\')
 msg = path[-3] +' '+ path[-1]
 runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
 runProcess("git push -u origin master")
+print(submit_score(problemid,check_if_user(),score))
