@@ -6,6 +6,7 @@ import platform
 import os.path
 import hashlib
 import base64
+import requests
 # import crypt
 def get_platform():
     platforms = {
@@ -42,6 +43,8 @@ def submit_score(score_obj):
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
     """
+    r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
+    print(r.status_code, r.reason)
     return score_obj
 
 def runProcess(command, expr=None):
@@ -193,4 +196,4 @@ path = os.getcwd().split('\\')
 msg = path[-3] +' '+ path[-1]
 runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
 runProcess("git push -u origin master")
-print(submit_score((problemid,check_if_user(),score)))
+print(submit_score((problemid,check_if_user(),cases)))
