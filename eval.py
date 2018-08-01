@@ -6,7 +6,6 @@ import platform
 import os.path
 import hashlib
 import base64
-import requests
 import json
 # import crypt
 def get_platform():
@@ -22,19 +21,19 @@ def get_platform():
 
 def check_git():
     try:
-        run_proc = subprocess.Popen('git', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        run_proc = subprocess.Popen(['git'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
     except Exception as e:
         return False
 
 def check_if_repo():
-    run_proc = subprocess.Popen('git status', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    run_proc = subprocess.Popen(['git', 'status'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = run_proc.communicate()
     if stderr: return False
     return True
 
 def check_if_user():
-    run_proc = subprocess.Popen('git config user.name', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    run_proc = subprocess.Popen(['git','config','user.name'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = run_proc.communicate()
     if stdout: return str(stdout)
     return False
@@ -60,8 +59,9 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
-        runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
-        runProcess("git push -u origin master")
+        runProcess(["git","add","."])
+        runProcess(["git","commit", "-m","\""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \""])
+        runProcess(["git","push","-u","origin","master"])
         # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
         # if r.status_code == 200:
         #     print("A version of your code is submitted along with score.")
@@ -69,7 +69,7 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         #     print("Something is not right with server. Report this error to incharge.")
     except Exception as e:
         print(e)
-        print("Warning: Cannot submit your code to the server. Check internet connection.")
+        print("Caution: Couldn't submit your code. Check internet connection or Git repo.")
         pass
     # return score_obj
 
@@ -226,12 +226,11 @@ else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
 problemid, cases, totalcases = result
-proc_out = runProcess("pylint "+program_name)
+proc_out = runProcess(["pylint",program_name])
 proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
 score, totalscore = 0,0
 if proc_out:
     score = int(float(proc_out[0][0]))
     totalscore = int(float(proc_out[0][1]))
-path = os.getcwd().split('\\')
-msg = path[-3] +' '+ path[-1]
+msg = ""
 submit_score((problemid,check_if_user(),str(cases)+'/'+str(totalcases),str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
