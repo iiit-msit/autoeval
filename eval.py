@@ -7,6 +7,7 @@ import os.path
 import hashlib
 import base64
 import requests
+import json
 # import crypt
 def get_platform():
     platforms = {
@@ -38,32 +39,46 @@ def check_if_user():
     if stdout: return str(stdout)
     return False
 
-def submit_score(score_obj):
+def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
     """ Take a score object and submit it to an endpoint
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
     """
+    with open('md5/problem_id.txt', 'r') as f:
+        data = f.read()
+        if computeMD5hash(score_obj[0]) != data:
+            print('Something is wrong with the problem ID. Result not generated.')
+            return
     try:
-        r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
-        if r.status_code == 200:
-            print("A version of your code is submitted along with score.")
-        else:
-            print("Something is not right with server. Report this error to incharge.")
+        os.makedirs('result')
+    except:
+        pass
+
+    try:
+        scorejson = {'problem_id':score_obj[0],'user_id':score_obj[1].rstrip(),'score':score_obj[2],'pylint_score':score_obj[3]}
+        with open('result/score.json','w') as f:
+            json.dump(scorejson,f)
+        with open('md5/score.txt','w') as f:
+            f.write(computeMD5hash(str(f)))
+        runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
+        runProcess("git push -u origin master")
+        # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
+        # if r.status_code == 200:
+        #     print("A version of your code is submitted along with score.")
+        # else:
+        #     print("Something is not right with server. Report this error to incharge.")
     except Exception as e:
+        print(e)
         print("Warning: Cannot submit your code to the server. Check internet connection.")
         pass
-    return score_obj
+    # return score_obj
 
-def runProcess(command, expr=None):
+def runProcess(command):
     run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
     proc_out = run_proc.stdout.read().decode('utf-8')
     print(proc_out)
-    if expr:
-        proc_out = re.findall(expr, proc_out)
-        if proc_out:
-            tests_passed = int(float(proc_out[0][0]))
-            tests_total = int(float(proc_out[0][1]))
-            return (tests_passed, tests_total)
+    return proc_out
+       
 
 def which_python():
     if (sys.version_info > (3, 0)):
@@ -86,6 +101,8 @@ def get_content(filename):
         return f.read()
 
 def execute(file, stdin):
+    from threading import Timer
+    
     filename,ext = os.path.splitext(file)
     if ext == ".java":
         subprocess.check_call(['javac', "Solution.java"])     #compile
@@ -98,14 +115,25 @@ def execute(file, stdin):
             cmd = ['./Solution']            #execute for other OS versions
     else:
         cmd = ['python', file]
+    
+    kill = lambda process: process.kill()
     proc = subprocess.Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=STDOUT)
-    stdout,stderr = proc.communicate(stdin)
+    
+    my_timer = Timer(10, kill, [proc])
+    try:
+        my_timer.start()
+        stdout,stderr = proc.communicate(stdin)
+    except Exception as e:
+        stdout = 'Caution: Your program is running for more than 10 seconds.'
+    finally:
+        my_timer.cancel()
+    
     return stdout
 
 def run_test(testcase_input,testcase_output):
-    input1 = get_content(testcase_input)
+    input1 = get_content('testcases/'+testcase_input)
     md5input = get_content("md5/"+testcase_input)
-    output = get_content(testcase_output)
+    output = get_content('testcases/'+testcase_output)
     md5output = get_content("md5/"+testcase_output)
     your_output = execute(program_name, input1)
 
@@ -114,7 +142,7 @@ def run_test(testcase_input,testcase_output):
         md5output = md5output.decode('utf-8')
 
     if computeMD5hash(input1) != md5input or computeMD5hash(output) != md5output:
-        # print(computeMD5hash(input),crypt.computeMD5hash1(input),computeMD5hash(output),crypt.computeMD5hash1(output))
+        print(computeMD5hash(input1),md5input,computeMD5hash(output),md5output)
         return False
 
     if python_version == 3:
@@ -128,7 +156,7 @@ def run_test(testcase_input,testcase_output):
 
 def run_tests(inputs,outputs,extension):
     passed = 0
-    problemid = get_content("md5/problem_id.txt")
+    problemid = get_content("testcases/problem_id.txt")
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
         if result == False:
@@ -155,7 +183,7 @@ inputs = []
 outputs = []
 
 # populate input and output lists
-for root,dirs,files in os.walk('.'):
+for root,dirs,files in os.walk('testcases/'):
     for file in files:
         if 'input' in file and '.txt' in file and "md5" not in file:
             inputs.append(file)
@@ -198,9 +226,12 @@ else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
 problemid, cases, totalcases = result
-score, totalscore = runProcess("pylint Solution.py","Your code has been rated at (.*)/(.*) \(.*\)")
+proc_out = runProcess("pylint "+program_name)
+proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
+score, totalscore = 0,0
+if proc_out:
+    score = int(float(proc_out[0][0]))
+    totalscore = int(float(proc_out[0][1]))
 path = os.getcwd().split('\\')
 msg = path[-3] +' '+ path[-1]
-runProcess("git commit -am \""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \"")
-runProcess("git push -u origin master")
-submit_score((problemid,check_if_user().strip(),cases))
+submit_score((problemid,check_if_user(),str(cases)+'/'+str(totalcases),str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
