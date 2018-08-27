@@ -15,7 +15,7 @@ def computeMD5hash(stringg):
     if python_version == 2:
         m.update(stringg.encode('utf8'))
     else:
-        m.update(stringg)
+        m.update(str.encode(str(stringg), 'utf-8'))
     return m.hexdigest()
 
 if not os.path.exists("md5/"):
@@ -24,7 +24,7 @@ if not os.path.exists("md5/"):
 for root,dirs,files in os.walk('testcases/'):
     for file in files:
         if '.txt' in file:
-            with open('testcases/'+file) as f:
+            with open('testcases/'+file, 'rb') as f:
                 md5_string = computeMD5hash(f.read())
                 f1 = open("md5/"+file, 'w')
                 f1.write(md5_string)

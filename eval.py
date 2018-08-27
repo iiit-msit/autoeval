@@ -35,7 +35,7 @@ def check_if_repo():
 def check_if_user():
     run_proc = subprocess.Popen(['git','config','user.name'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = run_proc.communicate()
-    if stdout: return str(stdout)
+    if stdout: return stdout.decode("utf-8").rstrip()
     return False
 
 def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
@@ -45,6 +45,7 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
     """
     with open('md5/problem_id.txt', 'r') as f:
         data = f.read()
+        print(data, computeMD5hash(score_obj[0]))
         if computeMD5hash(score_obj[0]) != data:
             print('Something is wrong with the problem ID. Result not generated.')
             return
@@ -54,7 +55,8 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         pass
 
     try:
-        scorejson = {'problem_id':score_obj[0],'user_id':score_obj[1].rstrip(),'score':score_obj[2],'pylint_score':score_obj[3]}
+        print(score_obj)
+        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'pylint_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
@@ -93,7 +95,7 @@ def computeMD5hash(stringg):
     if python_version == 2:
         m.update(stringg.encode('utf8'))
     else:
-        m.update(stringg)
+        m.update(str.encode(str(stringg), 'utf-8'))
     return m.hexdigest()
 
 def get_content(filename):
@@ -142,7 +144,7 @@ def run_test(testcase_input,testcase_output):
         md5output = md5output.decode('utf-8')
 
     if computeMD5hash(input1) != md5input or computeMD5hash(output) != md5output:
-        print(computeMD5hash(input1),md5input,computeMD5hash(output),md5output)
+        # print(computeMD5hash(input1),md5input,computeMD5hash(output),md5output)
         return False
 
     if python_version == 3:
@@ -214,6 +216,16 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         program_name = sys.argv[1]
         extension = ".py"
         result = run_tests(inputs,outputs,extension)
+        problemid, cases, totalcases = result
+        proc_out = runProcess(["pylint",program_name])
+        proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
+        score, totalscore = 0,0
+        if proc_out:
+            score = int(float(proc_out[0][0]))
+            totalscore = int(float(proc_out[0][1]))
+        msg = ""
+        submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
+
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         extension = ".c"
@@ -225,12 +237,3 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
-problemid, cases, totalcases = result
-proc_out = runProcess(["pylint",program_name])
-proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
-score, totalscore = 0,0
-if proc_out:
-    score = int(float(proc_out[0][0]))
-    totalscore = int(float(proc_out[0][1]))
-msg = ""
-submit_score((problemid,check_if_user(),str(cases)+'/'+str(totalcases),str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
