@@ -45,7 +45,6 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
     """
     with open('md5/problem_id.txt', 'r') as f:
         data = f.read()
-        print(data, computeMD5hash(score_obj[0]))
         if computeMD5hash(score_obj[0]) != data:
             print('Something is wrong with the problem ID. Result not generated.')
             return
@@ -55,7 +54,6 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         pass
 
     try:
-        print(score_obj)
         scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'pylint_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
@@ -156,6 +154,16 @@ def run_test(testcase_input,testcase_output):
 
     return input1,output,your_output,output==your_output
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.environ.get("_MEIPASS2",os.path.abspath("."))
+
+    return os.path.join(base_path, relative_path)
+
 def run_tests(inputs,outputs,extension):
     passed = 0
     problemid = get_content("testcases/problem_id.txt")
@@ -211,10 +219,12 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         program_name = sys.argv[1]
         extension = ".java"
         result = run_tests(inputs,outputs,extension)
+        proc_out = runProcess(['java', '-jar', resource_path('data')+'\\checkstyle-8.12-all.jar', '-c', resource_path('data') + '\\sun_checks_custom.xml', program_name])
+        score = 0
+        if len(proc_out) == 32: score = 1
         problemid, cases, totalcases = result
-        score = 1
+        
         totalscore = 1
-
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
         extension = ".py"
@@ -226,8 +236,6 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
-        
-
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         extension = ".c"
