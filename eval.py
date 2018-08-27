@@ -107,8 +107,8 @@ def execute(file, stdin):
     
     filename,ext = os.path.splitext(file)
     if ext == ".java":
-        subprocess.check_call(['javac', "Solution.java"])     #compile
-        cmd = ['java', "Solution"]                     #execute
+        subprocess.check_call(['javac', file])     #compile
+        cmd = ['java', file.strip('.java')]                     #execute
     elif ext == ".c":
         subprocess.check_call(['gcc',"-o","Solution","Solution.c"])     #compile
         if(platform.system() == "Windows"):
