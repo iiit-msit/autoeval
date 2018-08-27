@@ -211,6 +211,9 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         program_name = sys.argv[1]
         extension = ".java"
         result = run_tests(inputs,outputs,extension)
+        problemid, cases, totalcases = result
+        score = 1
+        totalscore = 1
 
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
@@ -223,8 +226,7 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
-        msg = ""
-        submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
+        
 
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
@@ -234,6 +236,9 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         print("eval.py cannot be passed as argument")
     else:
         print("Invalid Extension.\nPass only .java or .py files")
+    
+    msg = ""
+    submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
