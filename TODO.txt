@@ -1,0 +1,50 @@
+LOADING SERVER TESTCASES - EVAL
+===============================================================================
+Support eval to load testcases from server. These testcases shall be uploaded 
+along with the module zip, placed in attachments folder (Fig.1). An endpoint 
+should be written (Fig.2) to read all 'hidden_' files based on problem_id and 
+return a json of testcases (Fig.3). Eval should hit the endpoint based on the 
+problem_id, parse the json, populate input, output lists - which are currently 
+maintained and run like usual testcases. 
+
+Fig.1:
+	attachments/
+		Assignment1.zip 	#this will have problem_id
+		<problem_id>/
+			hidden_input000.txt
+			hidden_output000.txt
+
+Fig.2:
+	http://iiitdev.msitprogram.net/load_testcases/<problem_id>
+
+Fig.3:
+[
+	{
+		"input": "",
+		"output": ""
+	}
+]
+
+
+
+REQUIREMENTS:
+===============================================================================
+Server endpoint
+
+
+
+IMPLEMENTATION:
+===============================================================================
+ping-check()
+	check if server is reachable or not
+	return: Boolean
+
+load_testcases()
+	take a problem id, generate endpoint url, make an http request, return a json 
+	args: problem_id
+	return: json
+
+populate_testcases()
+	take a json, parse it and populate global inputs[], outputs[]
+	args: json
+	return: Boolean
