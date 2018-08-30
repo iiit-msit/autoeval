@@ -6,6 +6,7 @@ should be written (Fig.2) to read all 'hidden_' files based on problem_id and
 return a json of testcases (Fig.3). Eval should hit the endpoint based on the 
 problem_id, parse the json, populate input, output lists - which are currently 
 maintained and run like usual testcases. 
+Note: checking md5 must be omitted if we are running only server based testcases
 
 Fig.1:
 	attachments/
