@@ -7,6 +7,15 @@ import os.path
 import hashlib
 import base64
 import json
+import urllib.request
+
+def check_ping():
+    return get_json_data() != None
+
+def get_json_data():
+    with urllib.request.urlopen("http://127.0.0.1:5001/get_testcases/codecamp_document_distance") as url:
+        data = url.read().decode()
+        return json.loads(data.replace('\r',''))
 # import crypt
 def get_platform():
     platforms = {
@@ -54,13 +63,13 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         pass
 
     try:
-        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'pylint_score':score_obj[3]}
+        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],msg:score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
         runProcess(["git","add","."])
-        runProcess(["git","commit", "-m","\""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \""])
+        runProcess(["git","commit", "-m","\""+ "testcases" +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " style score: " + str(score) + "/" + str(totalscore) + " \""])
         runProcess(["git","push","-u","origin","master"])
         # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
         # if r.status_code == 200:
@@ -130,7 +139,7 @@ def execute(file, stdin):
     
     return stdout
 
-def run_test(testcase_input,testcase_output):
+def run_test(testcase_input, testcase_output):
     input1 = get_content('testcases/'+testcase_input)
     md5input = get_content("md5/"+testcase_input)
     output = get_content('testcases/'+testcase_output)
@@ -152,7 +161,7 @@ def run_test(testcase_input,testcase_output):
         your_output = your_output.replace('\r','').rstrip() #remove trailing newlines, if any
         output = output.replace('\r','').rstrip()
 
-    return input1,output,your_output,output==your_output
+    return input1, output, your_output, output==your_output
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -164,9 +173,8 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def run_tests(inputs,outputs,extension):
+def run_tests(inputs, outputs):
     passed = 0
-    problemid = get_content("testcases/problem_id.txt")
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
         if result == False:
@@ -187,8 +195,51 @@ def run_tests(inputs,outputs,extension):
             print(result[2]+"\n")
         print("----------------------------------------")
     print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
-    return (problemid, passed, len(inputs))
+    return (passed, len(inputs))
 
+def run_test_v2(test_input, test_output):
+    your_output = execute(program_name, test_input.encode()).decode().replace('\r','').rstrip()
+    # print(your_output.replace('\r',''))
+    test_output = test_output.replace('\r','').rstrip()
+    return test_input, test_output, your_output, test_output==your_output
+
+def run_tests_v2(data):
+    sample_cases = data["sample"]
+    hidden_cases = data["hidden"]
+    sample_passed = 0
+    for i, sample_case in enumerate(sample_cases):
+        test_input = sample_case["input"]
+        test_output = sample_case["output"]
+        result = run_test_v2(test_input, test_output)
+        if result[3] == True:
+            print("########## Testcase "+str(i)+": Passed ##########")
+            print("Expected Output: ")
+            print(result[1]+"\n")
+            print("Your Output: ")
+            print(result[2]+"\n")
+            sample_passed += 1
+        else:
+            print("########## Testcase "+str(i)+": Failed ##########")
+            print("Expected Output: ")
+            print(result[1]+"\n")
+            print("Your Output: ")
+            print(result[2]+"\n")
+        print("----------------------------------------")
+
+    print("Sample testcases passed: "+str(sample_passed)+"/"+str(len(sample_cases))+".")
+
+    hidden_passed = 0
+    for i, hidden_case in enumerate(hidden_cases):
+        test_input = hidden_case["input"]
+        test_output = hidden_case["output"]
+        result = run_test_v2(test_input, test_output)
+        if result[3] == True:
+            hidden_passed+=1
+
+    print("Hidden testcases passed: "+str(hidden_passed)+"/"+str(len(hidden_cases))+".")
+
+    print("Total testcases passed: "+str(sample_passed + hidden_passed)+"/"+str(len(sample_cases) + len(hidden_cases))+".")
+    return (sample_passed + hidden_passed) , (len(sample_cases) + len(hidden_cases))
 inputs = []
 outputs = []
 
@@ -215,38 +266,49 @@ inputs = sorted(inputs)
 outputs = sorted(outputs)
 
 if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
+    problemid = get_content("testcases/problem_id.txt")
     if sys.argv[1].endswith(".java"):
         program_name = sys.argv[1]
-        extension = ".java"
-        result = run_tests(inputs,outputs,extension)
-        proc_out = runProcess(['java', '-jar', resource_path('data')+'\\checkstyle-8.12-all.jar', '-c', resource_path('data') + '\\sun_checks_custom.xml', program_name])
+        if check_ping(): 
+            data = get_json_data()
+            result = run_tests_v2(data)
+        else: 
+            result = run_tests(inputs,outputs)
+        proc_out = runProcess(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name])
         score = 0
-        if len(proc_out) == 32: score = 1
-        problemid, cases, totalcases = result
-        
+        if len(proc_out) <= 32: score = 1
+        cases, totalcases = result
+        msg = "check_style_score"        
         totalscore = 1
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
-        extension = ".py"
-        result = run_tests(inputs,outputs,extension)
-        problemid, cases, totalcases = result
+        if check_ping():
+            data = get_json_data()
+            result = run_tests_v2(data)
+        else: 
+            result = run_tests(inputs,outputs)
+        cases, totalcases = result
         proc_out = runProcess(["pylint",program_name])
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
-        score, totalscore = 0,0
+        score, totalscore = 0, 0
+        msg = "pylint_score"
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
-        extension = ".c"
         result = run_tests(inputs,outputs,extension)
+        msg = ""
     elif sys.argv[1] == "eval.py":
+        msg = ""
         print("eval.py cannot be passed as argument")
+        exit(0)
     else:
+        msg = ""
         print("Invalid Extension.\nPass only .java or .py files")
+        exit(0)
     
-    msg = ""
     submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
 else:
-    print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
+    print("File not found.\nPass a valid filename with extension as argument.")
 
