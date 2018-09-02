@@ -9,14 +9,17 @@ import base64
 import json
 import urllib.request
 
-def check_ping():
-    return get_json_data() != None
+def check_ping(problemid):
+    return get_json_data(problemid) != None
 
-def get_json_data():
-    with urllib.request.urlopen("http://127.0.0.1:5001/get_testcases/codecamp_document_distance") as url:
-        data = url.read().decode()
-        return json.loads(data.replace('\r',''))
-# import crypt
+def get_json_data(problemid):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:5001/get_testcases/"+str(problemid)) as url:
+            data = url.read().decode()
+            return json.loads(data.replace('\r',''))
+    except:
+        return None
+
 def get_platform():
     platforms = {
         'linux1' : 'Linux',
@@ -269,8 +272,8 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
     problemid = get_content("testcases/problem_id.txt")
     if sys.argv[1].endswith(".java"):
         program_name = sys.argv[1]
-        if check_ping(): 
-            data = get_json_data()
+        if check_ping(problemid): 
+            data = get_json_data(problemid)
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
@@ -282,8 +285,8 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         totalscore = 1
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
-        if check_ping():
-            data = get_json_data()
+        if check_ping(problemid):
+            data = get_json_data(problemid)
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
