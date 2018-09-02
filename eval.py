@@ -13,6 +13,7 @@ def check_ping(problemid):
     return get_json_data(problemid) != None
 
 def get_json_data(problemid):
+    problemid = problemid.decode('utf-8')
     try:
         with urllib.request.urlopen("http://127.0.0.1:5001/get_testcases/"+str(problemid)) as url:
             data = url.read().decode()
@@ -50,7 +51,7 @@ def check_if_user():
     if stdout: return stdout.decode("utf-8").rstrip()
     return False
 
-def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
+def submit_score(score_obj,msg,cases,totalcases,hiddencases,totalhidden,score,totalscore):
     """ Take a score object and submit it to an endpoint
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
@@ -58,6 +59,7 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
     with open('md5/problem_id.txt', 'r') as f:
         data = f.read()
         if computeMD5hash(score_obj[0]) != data:
+            print(computeMD5hash(score_obj[0]),data)
             print('Something is wrong with the problem ID. Result not generated.')
             return
     try:
@@ -66,13 +68,20 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         pass
 
     try:
-        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],msg:score_obj[3]}
+        if score_obj[3] == "None/None":
+            hidden_res = "Server unreachable. Cannot run hidden testcases."
+            hiddencasesres = "Server unreachable. Cannot run hidden testcases."
+        else:
+            hidden_res = score_obj[3]
+            hiddencasesres = str(hiddencases) + " of " + str(totalhidden) + " hidden testcases passed."
+
+        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'hiddentestcases':hidden_res,msg:score_obj[4]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
         runProcess(["git","add","."])
-        runProcess(["git","commit", "-m","\""+ "testcases" +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " style score: " + str(score) + "/" + str(totalscore) + " \""])
+        runProcess(["git","commit", "-m","\""+ "testcases" +" -> " + str(cases) + " of " + str(totalcases) + " passed. " + hiddencasesres + " style score: " + str(score) + "/" + str(totalscore) + " \""])
         runProcess(["git","push","-u","origin","master"])
         # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
         # if r.status_code == 200:
@@ -197,8 +206,9 @@ def run_tests(inputs, outputs):
             print("Your Output: ")
             print(result[2]+"\n")
         print("----------------------------------------")
-    print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
-    return (passed, len(inputs))
+    print(str(passed)+"/"+str(len(inputs))+" testcases passed.")
+    print("Server unreachable. Cannot run hidden testcases.\n\n")
+    return (passed, len(inputs), None, None)
 
 def run_test_v2(test_input, test_output):
     your_output = execute(program_name, test_input.encode()).decode().replace('\r','').rstrip()
@@ -228,7 +238,7 @@ def run_tests_v2(data):
             print("Your Output: ")
             print(result[2]+"\n")
         print("----------------------------------------")
-
+    print("")
     print("Sample testcases passed: "+str(sample_passed)+"/"+str(len(sample_cases))+".")
 
     hidden_passed = 0
@@ -242,7 +252,9 @@ def run_tests_v2(data):
     print("Hidden testcases passed: "+str(hidden_passed)+"/"+str(len(hidden_cases))+".")
 
     print("Total testcases passed: "+str(sample_passed + hidden_passed)+"/"+str(len(sample_cases) + len(hidden_cases))+".")
-    return (sample_passed + hidden_passed) , (len(sample_cases) + len(hidden_cases))
+    print("\n")
+    return (sample_passed, len(sample_cases), hidden_passed, len(hidden_cases))
+
 inputs = []
 outputs = []
 
@@ -280,7 +292,7 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         proc_out = runProcess(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name])
         score = 0
         if len(proc_out) <= 32: score = 1
-        cases, totalcases = result
+        cases, totalcases, hidden, totalhidden = result
         msg = "check_style_score"        
         totalscore = 1
     elif sys.argv[1].endswith(".py"):
@@ -290,7 +302,7 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
-        cases, totalcases = result
+        cases, totalcases, hidden, totalhidden = result
         proc_out = runProcess(["pylint",program_name])
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
         score, totalscore = 0, 0
@@ -311,7 +323,7 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         print("Invalid Extension.\nPass only .java or .py files")
         exit(0)
     
-    submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
+    submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(hidden)+'/'+str(totalhidden), str(score)+'/'+str(totalscore)), msg, cases, totalcases, hidden, totalhidden, score, totalscore)
 else:
     print("File not found.\nPass a valid filename with extension as argument.")
 
