@@ -38,7 +38,7 @@ def check_if_user():
     if stdout: return stdout.decode("utf-8").rstrip()
     return False
 
-def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
+def submit_score(score_obj,msg):
     """ Take a score object and submit it to an endpoint
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
@@ -54,19 +54,14 @@ def submit_score(score_obj,msg,cases,totalcases,score,totalscore):
         pass
 
     try:
-        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'pylint_score':score_obj[3]}
+        scorejson = {'version_number':version_number,'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
         runProcess(["git","add","."])
-        runProcess(["git","commit", "-m","\""+ msg +" -> " + str(cases) + " of " + str(totalcases) + " passed." + " pylint: " + str(score) + "/" + str(totalscore) + " \""])
+        runProcess(["git","commit", "-m","\"" + msg + " \""])
         runProcess(["git","push","-u","origin","master"])
-        # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
-        # if r.status_code == 200:
-        #     print("A version of your code is submitted along with score.")
-        # else:
-        #     print("Something is not right with server. Report this error to incharge.")
     except Exception as e:
         print(e)
         print("Caution: Couldn't submit your code. Check internet connection or Git repo.")
@@ -167,8 +162,10 @@ def resource_path(relative_path):
 def run_tests(inputs,outputs,extension):
     passed = 0
     problemid = get_content("testcases/problem_id.txt")
+    tc_result_dict = {}
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
+        tc_result_dict[i] = {}
         if result == False:
             print("########## Testcase "+str(i)+": Failed ##########")
             print("Something is wrong with the testcase.\n")
@@ -179,15 +176,19 @@ def run_tests(inputs,outputs,extension):
             print("Your Output: ")
             print(result[2]+"\n")
             passed+=1
+            tc_result_dict[i]['passed'] = True
+            # tc_result_dict[i]['output'] = result[2]
         else:
             print("########## Testcase "+str(i)+": Failed ##########")
             print("Expected Output: ")
             print(result[1]+"\n")
             print("Your Output: ")
             print(result[2]+"\n")
+            tc_result_dict[i]['passed'] = False
+            # tc_result_dict[i]['output'] = result[2]
         print("----------------------------------------")
     print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
-    return (problemid, passed, len(inputs))
+    return (problemid, passed, len(inputs), tc_result_dict)
 
 inputs = []
 outputs = []
@@ -219,34 +220,38 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         program_name = sys.argv[1]
         extension = ".java"
         result = run_tests(inputs,outputs,extension)
-        proc_out = runProcess(['java', '-jar', resource_path('data')+'\\checkstyle-8.12-all.jar', '-c', resource_path('data') + '\\sun_checks_custom.xml', program_name])
+        proc_out = runProcess(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name])
         score = 0
-        if len(proc_out) == 32: score = 1
-        problemid, cases, totalcases = result
-        
+        if len(proc_out) <= 32: score = 1
+        problemid, cases, totalcases, tc_result_dict = result
+        STYLE_CHECKER = "check_style"
         totalscore = 1
     elif sys.argv[1].endswith(".py"):
         program_name = sys.argv[1]
         extension = ".py"
         result = run_tests(inputs,outputs,extension)
-        problemid, cases, totalcases = result
+        problemid, cases, totalcases, tc_result_dict = result
         proc_out = runProcess(["pylint",program_name])
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
         score, totalscore = 0,0
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
+        STYLE_CHECKER = "pylint"
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         extension = ".c"
         result = run_tests(inputs,outputs,extension)
+        exit(0)
     elif sys.argv[1] == "eval.py":
         print("eval.py cannot be passed as argument")
+        exit(0)
     else:
         print("Invalid Extension.\nPass only .java or .py files")
-    
-    msg = ""
-    submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(score)+'/'+str(totalscore)), msg, cases, totalcases, score, totalscore)
+        exit(0)
+
+    msg = str(problem_id) + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
+    submit_score((problemid , check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
