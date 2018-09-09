@@ -82,6 +82,12 @@ def runProcess(command):
     print(proc_out)
     return proc_out
        
+def runProcessUseFileout(command, filename):
+    run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
+    proc_out = run_proc.stdout.read().decode('utf-8')
+    with open(filename, 'w+') as logfile:
+        logfile.write(proc_out)
+    return proc_out
 
 def which_python():
     if (sys.version_info > (3, 0)):
@@ -228,7 +234,7 @@ if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
         program_name = sys.argv[1]
         extension = ".java"
         result = run_tests(inputs,outputs,extension)
-        proc_out = runProcess(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name])
+        proc_out = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name], "check_style_errors.txt")
         score = 0
         if len(proc_out) <= 32: score = 1
         problemid, cases, totalcases, tc_result_dict = result
@@ -239,7 +245,7 @@ if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
         extension = ".py"
         result = run_tests(inputs,outputs,extension)
         problemid, cases, totalcases, tc_result_dict = result
-        proc_out = runProcess(["pylint",program_name])
+        proc_out = runProcessUseFileout(["pylint",program_name], "pylint_errors.txt")
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
         score, totalscore = 0,0
         if proc_out:
