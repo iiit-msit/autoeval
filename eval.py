@@ -15,7 +15,7 @@ def check_ping(problemid):
 def get_json_data(problemid):
     problemid = problemid.decode('utf-8')
     try:
-        with urllib.request.urlopen("http://127.0.0.1:5001/get_testcases/"+str(problemid)) as url:
+        with urllib.request.urlopen("http://msit-codeeval.appspot.com/get_testcases/"+str(problemid)) as url:
             data = url.read().decode()
             return json.loads(data.replace('\r',''))
     except:
@@ -51,7 +51,7 @@ def check_if_user():
     if stdout: return stdout.decode("utf-8").rstrip()
     return False
 
-def submit_score(score_obj,msg,cases,totalcases,hiddencases,totalhidden,score,totalscore):
+def submit_score(score_obj,msg):
     """ Take a score object and submit it to an endpoint
         kwargs:
         score object -- (<problemid>,<user.name>,<score>)
@@ -68,26 +68,32 @@ def submit_score(score_obj,msg,cases,totalcases,hiddencases,totalhidden,score,to
         pass
 
     try:
-        if score_obj[3] == "None/None":
-            hidden_res = "Server unreachable. Cannot run hidden testcases."
-            hiddencasesres = "Server unreachable. Cannot run hidden testcases."
-        else:
-            hidden_res = score_obj[3]
-            hiddencasesres = str(hiddencases) + " of " + str(totalhidden) + " hidden testcases passed."
-
-        scorejson = {'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2],'hiddentestcases':hidden_res,msg:score_obj[4]}
+        if len(sys.argv)>=3 and sys.argv[2] == "-git":
+            # to replcae contents for each run
+            git_op_file = open("git_output.txt", "w+")
+            git_op_file.close()
+            runProcess(["git","add","."])
+            runProcess(["git","commit", "-m","\"" + msg + " \""])
+            runProcess(["git","push","-u","origin","master"])
+            git_op_file = open("git_output.txt", "r")
+            git_op = git_op_file.read()
+            if "fatal: " in git_op or "! [rejected]" in git_op:
+                print("Git Status: push unsuccessful. Details in git_output.txt")
+            else:
+                print("Git Status: push successful. Details in git_output.txt")
+        # version_number = subprocess.check_output(["git","shortlog","-s","--grep="+str(score_obj[0].decode('utf8')).strip()])
+        # print(["git","shortlog","-s","--grep="+str(score_obj[0])], version_number)
+        # version_number = version_number.strip().split('\t')[0]
+        # if int(version_number):
+        #     version_number = "v"+str(version_number).replace('\n','')
+        # else:
+        #     version_number = "v1"
+        scorejson = {'problem_id':str(score_obj[0].decode('utf-8')).strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
-        runProcess(["git","add","."])
-        runProcess(["git","commit", "-m","\""+ "testcases" +" -> " + str(cases) + " of " + str(totalcases) + " passed. " + hiddencasesres + " style score: " + str(score) + "/" + str(totalscore) + " \""])
-        runProcess(["git","push","-u","origin","master"])
-        # r = requests.post("http://google.com", data={'problem_id':score_obj[0],'user_id':score_obj[1],'score':score_obj[2]})
-        # if r.status_code == 200:
-        #     print("A version of your code is submitted along with score.")
-        # else:
-        #     print("Something is not right with server. Report this error to incharge.")
+
     except Exception as e:
         print(e)
         print("Caution: Couldn't submit your code. Check internet connection or Git repo.")
@@ -95,9 +101,15 @@ def submit_score(score_obj,msg,cases,totalcases,hiddencases,totalhidden,score,to
     # return score_obj
 
 def runProcess(command):
+    git_op_file = open("git_output.txt", "a")
+    run_proc = subprocess.call(command, stdout=git_op_file, stderr=subprocess.STDOUT)
+    git_op_file.close()
+       
+def runProcessUseFileout(command, filename):
     run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
     proc_out = run_proc.stdout.read().decode('utf-8')
-    print(proc_out)
+    with open(filename, 'w+') as logfile:
+        logfile.write(proc_out)
     return proc_out
        
 
@@ -185,30 +197,41 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def run_tests(inputs, outputs):
+def run_tests(inputs,outputs):
     passed = 0
+    problemid = get_content("testcases/problem_id.txt")
+    tc_result_dict = {}
+    tc_result_dict['sample'] = {}
+    tc_result_dict['hidden'] = {}
+    res_str = ""
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
+        tc_result_dict['sample'][i] = {}
         if result == False:
-            print("########## Testcase "+str(i)+": Failed ##########")
-            print("Something is wrong with the testcase.\n")
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Something is wrong with the testcase.\n"
         elif result[3] == True:
-            print("########## Testcase "+str(i)+": Passed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
+            res_str += "########## Testcase "+str(i)+": Passed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
             passed+=1
+            tc_result_dict['sample'][i]['passed'] = True
+            # tc_result_dict['sample'][i]['output'] = result[2]
         else:
-            print("########## Testcase "+str(i)+": Failed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
-        print("----------------------------------------")
-    print(str(passed)+"/"+str(len(inputs))+" testcases passed.")
-    print("Server unreachable. Cannot run hidden testcases.\n\n")
-    return (passed, len(inputs), None, None)
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
+            tc_result_dict['sample'][i]['passed'] = False
+            # tc_result_dict[i]['output'] = result[2]
+        res_str += "----------------------------------------\n"
+    with open("testcases_output.txt", "w+") as tc_res_file:
+        tc_res_file.write(res_str)
+    print("Testcases Status: "+str(passed)+"/"+str(len(inputs))+" testcases passed. Server unreachable. Cannot run hidden testcases. Details in testcases_output.txt")
+    return (problemid, passed, len(inputs), None, None, tc_result_dict)
 
 def run_test_v2(test_input, test_output):
     your_output = execute(program_name, test_input.encode()).decode().replace('\r','').rstrip()
@@ -220,40 +243,60 @@ def run_tests_v2(data):
     sample_cases = data["sample"]
     hidden_cases = data["hidden"]
     sample_passed = 0
-    for i, sample_case in enumerate(sample_cases):
-        test_input = sample_case["input"]
-        test_output = sample_case["output"]
-        result = run_test_v2(test_input, test_output)
-        if result[3] == True:
-            print("########## Testcase "+str(i)+": Passed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
-            sample_passed += 1
+    tc_result_dict = {}
+    tc_result_dict['sample'] = {}
+    tc_result_dict['hidden'] = {}
+    res_str = ""
+    for i in range(len(inputs)):
+        result = run_test(inputs[i],outputs[i])
+        tc_result_dict['sample'][i] = {}
+        if result == False:
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Something is wrong with the testcase.\n"
+        elif result[3] == True:
+            res_str += "########## Testcase "+str(i)+": Passed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
+            sample_passed+=1
+            tc_result_dict['sample'][i]['passed'] = True
+            # tc_result_dict[i]['output'] = result[2]
         else:
-            print("########## Testcase "+str(i)+": Failed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
-        print("----------------------------------------")
-    print("")
-    print("Sample testcases passed: "+str(sample_passed)+"/"+str(len(sample_cases))+".")
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
+            tc_result_dict['sample'][i]['passed'] = False
+            # tc_result_dict[i]['output'] = result[2]
+        res_str += "----------------------------------------\n"
 
     hidden_passed = 0
     for i, hidden_case in enumerate(hidden_cases):
         test_input = hidden_case["input"]
         test_output = hidden_case["output"]
         result = run_test_v2(test_input, test_output)
+        tc_result_dict['hidden'][i] = {}
         if result[3] == True:
+            res_str += "########## Hidden Testcase "+str(i)+": Passed ##########\n"
+            tc_result_dict['hidden'][i]['passed'] = True
             hidden_passed+=1
+        else:
+            res_str += "########## Hidden Testcase "+str(i)+": Failed ##########\n"
+            tc_result_dict['hidden'][i]['passed'] = False
 
-    print("Hidden testcases passed: "+str(hidden_passed)+"/"+str(len(hidden_cases))+".")
 
-    print("Total testcases passed: "+str(sample_passed + hidden_passed)+"/"+str(len(sample_cases) + len(hidden_cases))+".")
-    print("\n")
-    return (sample_passed, len(sample_cases), hidden_passed, len(hidden_cases))
+    # print("Hidden testcases passed: "+str(hidden_passed)+"/"+str(len(hidden_cases))+".")
+
+    # print("Total testcases passed: "+str(sample_passed + hidden_passed)+"/"+str(len(sample_cases) + len(hidden_cases))+".")
+    # print("\n")
+    # return (sample_passed, len(sample_cases), hidden_passed, len(hidden_cases))
+
+    with open("testcases_output.txt", "w+") as tc_res_file:
+        tc_res_file.write(res_str)
+    print("Testcases Status: "+str(sample_passed)+"/"+str(len(sample_cases))+" testcases passed. "+str(hidden_passed)+"/"+str(len(hidden_cases))+" hidden testcases passed. Details in testcases_output.txt")
+    return (problemid, sample_passed, len(inputs), hidden_passed, len(hidden_cases), tc_result_dict)
 
 inputs = []
 outputs = []
@@ -280,40 +323,53 @@ if not check_if_user():
 inputs = sorted(inputs)
 outputs = sorted(outputs)
 
-if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
+if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
     problemid = get_content("testcases/problem_id.txt")
+    style_fname = ""
     if sys.argv[1].endswith(".java"):
+        style_fname = "check_style_errors.txt"
         program_name = sys.argv[1]
         if check_ping(problemid): 
             data = get_json_data(problemid)
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
-        proc_out = runProcess(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name])
+        proc_out = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name], style_fname)
         score = 0
         if len(proc_out) <= 32: score = 1
-        cases, totalcases, hidden, totalhidden = result
-        msg = "check_style_score"        
+        problemid, cases, totalcases, hidden, totalhidden, tc_result_dict = result
+        STYLE_CHECKER = "check_style"        
         totalscore = 1
+        proc_out = re.findall("Checkstyle ends with (.*) errors.", proc_out)
+        if proc_out == []:
+            proc_out = "Your code has scored "+str(score)+"/"+str(totalscore)
+        else:
+            proc_out = "Checkstyle ends with "+str(proc_out[0])+" errors."
+
     elif sys.argv[1].endswith(".py"):
+        style_fname = "pylint_errors.txt"
         program_name = sys.argv[1]
         if check_ping(problemid):
             data = get_json_data(problemid)
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
-        cases, totalcases, hidden, totalhidden = result
-        proc_out = runProcess(["pylint",program_name])
+        problemid, cases, totalcases, hidden, totalhidden, tc_result_dict = result
+        proc_out = runProcessUseFileout(["pylint",program_name], style_fname)
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
         score, totalscore = 0, 0
         msg = "pylint_score"
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
+            proc_out = "Your code scored "+str(score)+"/"+str(totalscore)+"."
+        STYLE_CHECKER = "pylint"
+
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         result = run_tests(inputs,outputs,extension)
         msg = ""
+        exit(0)
     elif sys.argv[1] == "eval.py":
         msg = ""
         print("eval.py cannot be passed as argument")
@@ -323,7 +379,14 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         print("Invalid Extension.\nPass only .java or .py files")
         exit(0)
     
-    submit_score((problemid , check_if_user() , str(cases)+'/'+str(totalcases), str(hidden)+'/'+str(totalhidden), str(score)+'/'+str(totalscore)), msg, cases, totalcases, hidden, totalhidden, score, totalscore)
+    if hidden == None and totalhidden == None:
+        hiddencasesres = "Server unreachable. Cannot run hidden testcases. "
+    else:
+        hiddencasesres = str(hidden) + " of " + str(totalhidden) + " hidden testcases passed. "
+    
+    msg = str(problemid.decode('utf-8')).strip() + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ hiddencasesres + STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
+    print("Code Style: "+str(proc_out)+" Details in "+style_fname)
+
+    submit_score((problemid , check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
 else:
     print("File not found.\nPass a valid filename with extension as argument.")
-
