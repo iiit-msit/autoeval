@@ -55,9 +55,18 @@ def submit_score(score_obj,msg):
 
     try:
         if len(sys.argv)>=3 and sys.argv[2] == "-git":
+            # to replcae contents for each run
+            git_op_file = open("git_result.txt", "w+")
+            git_op_file.close()
             runProcess(["git","add","."])
             runProcess(["git","commit", "-m","\"" + msg + " \""])
             runProcess(["git","push","-u","origin","master"])
+            git_op_file = open("git_result.txt", "r")
+            git_op = git_op_file.read()
+            if "fatal: " in git_op or "! [rejected]" in git_op:
+                print("Git Status: push unsuccessful. Details in git_output.txt")
+            else:
+                print("Git Status: push successful. Details in git_output.txt")
         # version_number = subprocess.check_output(["git","shortlog","-s","--grep="+str(score_obj[0].decode('utf8')).strip()])
         # print(["git","shortlog","-s","--grep="+str(score_obj[0])], version_number)
         # version_number = version_number.strip().split('\t')[0]
@@ -74,13 +83,11 @@ def submit_score(score_obj,msg):
         print(e)
         print("Caution: Couldn't submit your code. Check internet connection or Git repo.")
         pass
-    # return score_obj
 
 def runProcess(command):
-    run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-    proc_out = run_proc.stdout.read().decode('utf-8')
-    print(proc_out)
-    return proc_out
+    git_op_file = open("git_result.txt", "a")
+    run_proc = subprocess.call(command, stdout=git_op_file, stderr=subprocess.STDOUT)
+    git_op_file.close()
        
 def runProcessUseFileout(command, filename):
     run_proc = subprocess.Popen(command, stdout=subprocess.PIPE)
@@ -177,31 +184,34 @@ def run_tests(inputs,outputs,extension):
     passed = 0
     problemid = get_content("testcases/problem_id.txt")
     tc_result_dict = {}
+    res_str = ""
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
         tc_result_dict[i] = {}
         if result == False:
-            print("########## Testcase "+str(i)+": Failed ##########")
-            print("Something is wrong with the testcase.\n")
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Something is wrong with the testcase.\n"
         elif result[3] == True:
-            print("########## Testcase "+str(i)+": Passed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
+            res_str += "########## Testcase "+str(i)+": Passed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
             passed+=1
             tc_result_dict[i]['passed'] = True
             # tc_result_dict[i]['output'] = result[2]
         else:
-            print("########## Testcase "+str(i)+": Failed ##########")
-            print("Expected Output: ")
-            print(result[1]+"\n")
-            print("Your Output: ")
-            print(result[2]+"\n")
+            res_str += "########## Testcase "+str(i)+": Failed ##########\n"
+            res_str += "Expected Output: \n"
+            res_str += result[1]+"\n"
+            res_str += "Your Output: \n"
+            res_str += result[2]+"\n"
             tc_result_dict[i]['passed'] = False
             # tc_result_dict[i]['output'] = result[2]
-        print("----------------------------------------")
-    print("Result: "+str(passed)+"/"+str(len(inputs))+" testcases passed.")
+        res_str += "----------------------------------------\n"
+    with open("testcases_output.txt", "w+") as tc_res_file:
+        tc_res_file.write(res_str)
+    print("Testcases Status: "+str(passed)+"/"+str(len(inputs))+" testcases passed. Details in testcases_output.txt")
     return (problemid, passed, len(inputs), tc_result_dict)
 
 inputs = []
@@ -230,28 +240,39 @@ inputs = sorted(inputs)
 outputs = sorted(outputs)
 
 if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
+    style_fname = ""
     if sys.argv[1].endswith(".java"):
+        style_fname = "check_style_errors.txt"
         program_name = sys.argv[1]
         extension = ".java"
         result = run_tests(inputs,outputs,extension)
-        proc_out = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name], "check_style_errors.txt")
+        proc_out = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name], style_fname)
         score = 0
         if len(proc_out) <= 32: score = 1
         problemid, cases, totalcases, tc_result_dict = result
         STYLE_CHECKER = "check_style"
         totalscore = 1
+        
+        proc_out = re.findall("Checkstyle ends with (.*) errors.", proc_out)
+        if proc_out == []:
+            proc_out = "Your code has scored "+str(score)+"/"+str(totalscore)
+        else:
+            proc_out = "Checkstyle ends with "+str(proc_out[0])+" errors."
+
     elif sys.argv[1].endswith(".py"):
+        style_fname = "pylint_errors.txt"
         program_name = sys.argv[1]
         extension = ".py"
         result = run_tests(inputs,outputs,extension)
         problemid, cases, totalcases, tc_result_dict = result
-        proc_out = runProcessUseFileout(["pylint",program_name], "pylint_errors.txt")
+        proc_out = runProcessUseFileout(["pylint",program_name], style_fname)
         proc_out = re.findall("Your code has been rated at (.*)/(.*) \(.*\)", proc_out)
         score, totalscore = 0,0
         if proc_out:
             score = int(float(proc_out[0][0]))
             totalscore = int(float(proc_out[0][1]))
         STYLE_CHECKER = "pylint"
+
     elif sys.argv[1].endswith(".c"):
         program_name = sys.argv[1]
         extension = ".c"
@@ -265,6 +286,7 @@ if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
         exit(0)
 
     msg = str(problemid.decode('utf-8')).strip() + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
+    print("Code Style: "+str(proc_out)+" Details in "+style_fname)
     # print(str(problemid.decode('utf-8')).strip())
     submit_score((problemid, check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
 else:
