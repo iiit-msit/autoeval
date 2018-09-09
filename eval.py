@@ -54,14 +54,22 @@ def submit_score(score_obj,msg):
         pass
 
     try:
-        scorejson = {'version_number':version_number,'problem_id':score_obj[0].decode('utf-8').strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
+        if len(sys.argv)>=3 and sys.argv[2] == "-git":
+            runProcess(["git","add","."])
+            runProcess(["git","commit", "-m","\"" + msg + " \""])
+            runProcess(["git","push","-u","origin","master"])
+        # version_number = subprocess.check_output(["git","shortlog","-s","--grep="+str(score_obj[0].decode('utf8')).strip()])
+        # print(["git","shortlog","-s","--grep="+str(score_obj[0])], version_number)
+        # version_number = version_number.strip().split('\t')[0]
+        # if int(version_number):
+        #     version_number = "v"+str(version_number).replace('\n','')
+        # else:
+        #     version_number = "v1"
+        scorejson = {'problem_id':str(score_obj[0].decode('utf-8')).strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
             f.write(computeMD5hash(str(f)))
-        runProcess(["git","add","."])
-        runProcess(["git","commit", "-m","\"" + msg + " \""])
-        runProcess(["git","push","-u","origin","master"])
     except Exception as e:
         print(e)
         print("Caution: Couldn't submit your code. Check internet connection or Git repo.")
@@ -215,7 +223,7 @@ if not check_if_user():
 inputs = sorted(inputs)
 outputs = sorted(outputs)
 
-if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
+if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
     if sys.argv[1].endswith(".java"):
         program_name = sys.argv[1]
         extension = ".java"
@@ -250,8 +258,9 @@ if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
         print("Invalid Extension.\nPass only .java or .py files")
         exit(0)
 
-    msg = str(problem_id) + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
-    submit_score((problemid , check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
+    msg = str(problemid.decode('utf-8')).strip() + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
+    # print(str(problemid.decode('utf-8')).strip())
+    submit_score((problemid, check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
 else:
     print("File not found.\nPass a valid filename with extension as argument.\npython eval.py <filename>")
 
