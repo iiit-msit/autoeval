@@ -8,6 +8,7 @@ import hashlib
 import base64
 import json
 import urllib.request
+import time
 
 def check_ping(problemid):
     return get_json_data(problemid) != None
@@ -68,7 +69,9 @@ def submit_score(score_obj,msg):
         pass
 
     try:
-        if len(sys.argv)>=3 and sys.argv[2] == "-git":
+        if len(sys.argv)>=3 and sys.argv[2] == "-nogit":
+            print("Not using git...")
+        else:
             # to replcae contents for each run
             git_op_file = open("git_output.txt", "w+")
             git_op_file.close()
@@ -78,17 +81,16 @@ def submit_score(score_obj,msg):
             git_op_file = open("git_output.txt", "r")
             git_op = git_op_file.read()
             if "fatal: " in git_op or "! [rejected]" in git_op:
-                print("Git Status: push unsuccessful. Details in git_output.txt")
+                print("\nGit Status: \npush unsuccessful. Details in git_output.txt")
             else:
-                print("Git Status: push successful. Details in git_output.txt")
-        # version_number = subprocess.check_output(["git","shortlog","-s","--grep="+str(score_obj[0].decode('utf8')).strip()])
-        # print(["git","shortlog","-s","--grep="+str(score_obj[0])], version_number)
-        # version_number = version_number.strip().split('\t')[0]
-        # if int(version_number):
-        #     version_number = "v"+str(version_number).replace('\n','')
-        # else:
-        #     version_number = "v1"
-        scorejson = {'problem_id':str(score_obj[0].decode('utf-8')).strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
+                print("\nGit Status: \npush successful. Details in git_output.txt")
+
+        if('hidden' in score_obj[2]):
+            message = "SUCCESS"
+        else:
+            message = "ERROR: Hidden Testcases server unreachable."
+
+        scorejson = {'version':'1', 'message':message, 'problem_id':str(score_obj[0].decode('utf-8')).strip(),'user_id':score_obj[1],'score':score_obj[2], STYLE_CHECKER+'_score':score_obj[3]}
         with open('result/score.json','w') as f:
             json.dump(scorejson,f)
         with open('md5/score.txt','w') as f:
@@ -150,6 +152,7 @@ def execute(file, stdin):
         cmd = ['python', file]
     
     kill = lambda process: process.kill()
+    timeStarted = time.time()
     proc = subprocess.Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=STDOUT)
     
     my_timer = Timer(10, kill, [proc])
@@ -160,15 +163,15 @@ def execute(file, stdin):
         stdout = 'Caution: Your program is running for more than 10 seconds.'
     finally:
         my_timer.cancel()
-    
-    return stdout
+    timeDelta = time.time() - timeStarted
+    return stdout, timeDelta
 
 def run_test(testcase_input, testcase_output):
     input1 = get_content('testcases/'+testcase_input)
     md5input = get_content("md5/"+testcase_input)
     output = get_content('testcases/'+testcase_output)
     md5output = get_content("md5/"+testcase_output)
-    your_output = execute(program_name, input1)
+    your_output, time_taken = execute(program_name, input1)
 
     if python_version == 3:
         md5input = md5input.decode('utf-8')
@@ -185,7 +188,7 @@ def run_test(testcase_input, testcase_output):
         your_output = your_output.replace('\r','').rstrip() #remove trailing newlines, if any
         output = output.replace('\r','').rstrip()
 
-    return input1, output, your_output, output==your_output
+    return input1, output, your_output, output==your_output, time_taken
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -202,11 +205,12 @@ def run_tests(inputs,outputs):
     problemid = get_content("testcases/problem_id.txt")
     tc_result_dict = {}
     tc_result_dict['sample'] = {}
-    tc_result_dict['hidden'] = {}
     res_str = ""
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
         tc_result_dict['sample'][i] = {}
+        time_taken = result[4]
+        tc_result_dict['sample'][i]['execution_time'] = time_taken
         if result == False:
             res_str += "########## Testcase "+str(i)+": Failed ##########\n"
             res_str += "Something is wrong with the testcase.\n"
@@ -230,14 +234,15 @@ def run_tests(inputs,outputs):
         res_str += "----------------------------------------\n"
     with open("testcases_output.txt", "w+") as tc_res_file:
         tc_res_file.write(res_str)
-    print("Testcases Status: "+str(passed)+"/"+str(len(inputs))+" testcases passed. Server unreachable. Cannot run hidden testcases. Details in testcases_output.txt")
+    print("Testcases Status: "+str(passed)+"/"+str(len(inputs))+" testcases passed. Cannot run hidden testcases as Server is unreachable. Details in testcases_output.txt")
     return (problemid, passed, len(inputs), None, None, tc_result_dict)
 
 def run_test_v2(test_input, test_output):
-    your_output = execute(program_name, test_input.encode()).decode().replace('\r','').rstrip()
+    your_output, time_taken = execute(program_name, test_input)
+    your_output = your_output.replace('\r','').rstrip()
     # print(your_output.replace('\r',''))
     test_output = test_output.replace('\r','').rstrip()
-    return test_input, test_output, your_output, test_output==your_output
+    return test_input, test_output, your_output, test_output==your_output, time_taken
 
 def run_tests_v2(data):
     sample_cases = data["sample"]
@@ -249,7 +254,9 @@ def run_tests_v2(data):
     res_str = ""
     for i in range(len(inputs)):
         result = run_test(inputs[i],outputs[i])
+        time_taken = result[4]
         tc_result_dict['sample'][i] = {}
+        tc_result_dict['sample'][i]['execution_time'] = time_taken
         if result == False:
             res_str += "########## Testcase "+str(i)+": Failed ##########\n"
             res_str += "Something is wrong with the testcase.\n"
@@ -278,6 +285,8 @@ def run_tests_v2(data):
         test_output = hidden_case["output"]
         result = run_test_v2(test_input, test_output)
         tc_result_dict['hidden'][i] = {}
+        time_taken = result[4]
+        tc_result_dict['hidden'][i]['execution_time'] = time_taken
         if result[3] == True:
             res_str += "########## Hidden Testcase "+str(i)+": Passed ##########\n"
             tc_result_dict['hidden'][i]['passed'] = True
@@ -295,7 +304,7 @@ def run_tests_v2(data):
 
     with open("testcases_output.txt", "w+") as tc_res_file:
         tc_res_file.write(res_str)
-    print("Testcases Status: "+str(sample_passed)+"/"+str(len(sample_cases))+" testcases passed. "+str(hidden_passed)+"/"+str(len(hidden_cases))+" hidden testcases passed. Details in testcases_output.txt")
+    print("Testcases Status: \n"+str(sample_passed)+"/"+str(len(sample_cases))+" testcases passed. "+str(hidden_passed)+"/"+str(len(hidden_cases))+" hidden testcases passed. Details in testcases_output.txt")
     return (problemid, sample_passed, len(inputs), hidden_passed, len(hidden_cases), tc_result_dict)
 
 inputs = []
@@ -334,17 +343,28 @@ if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
             result = run_tests_v2(data)
         else: 
             result = run_tests(inputs,outputs)
-        proc_out = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), program_name], style_fname)
+        proc_out_arr = []
         score = 0
-        if len(proc_out) <= 32: score = 1
+        curdir = os.getcwd()
+        for root,dirs,files in os.walk(curdir):
+            for file in files:
+                if file.endswith('.java'):          
+                    proc_o = runProcessUseFileout(['java', '-jar', resource_path('data/checkstyle-8.12-all.jar'), '-c', resource_path('data/sun_checks_custom.xml'), file], style_fname)
+                    proc_out_arr.append((file,proc_o))
+        
         problemid, cases, totalcases, hidden, totalhidden, tc_result_dict = result
         STYLE_CHECKER = "check_style"        
         totalscore = 1
-        proc_out = re.findall("Checkstyle ends with (.*) errors.", proc_out)
-        if proc_out == []:
-            proc_out = "Your code has scored "+str(score)+"/"+str(totalscore)
-        else:
-            proc_out = "Checkstyle ends with "+str(proc_out[0])+" errors."
+        proc_out = ''
+        for file,Iproc_out in proc_out_arr:
+            score = 0
+            Iproc_out = re.findall("Checkstyle ends with (.*) errors.", Iproc_out)
+            if Iproc_out == []:
+                proc_out += file+" has scored 1/"+str(totalscore)+" checkstyle score"
+                score = 1
+            else:
+                proc_out += file+" Checkstyle ends with "+str(Iproc_out[0])+" errors"
+            proc_out+='\n'
 
     elif sys.argv[1].endswith(".py"):
         style_fname = "pylint_errors.txt"
@@ -380,12 +400,12 @@ if len(sys.argv)>=2 and os.path.isfile(sys.argv[1]):
         exit(0)
     
     if hidden == None and totalhidden == None:
-        hiddencasesres = "Server unreachable. Cannot run hidden testcases. "
+        hiddencasesres = "Cannot run hidden testcases as Server is unreachable"
     else:
         hiddencasesres = str(hidden) + " of " + str(totalhidden) + " hidden testcases passed. "
     
     msg = str(problemid.decode('utf-8')).strip() + ": " + str(cases)+"/"+str(totalcases)+" testcases passed. "+ hiddencasesres + STYLE_CHECKER +" score: "+str(score)+"/"+str(totalscore)
-    print("Code Style: "+str(proc_out)+" Details in "+style_fname)
+    print("\nCode Style: \n"+str(proc_out)+" Details in "+style_fname)
 
     submit_score((problemid , check_if_user() , tc_result_dict, str(score)+'/'+str(totalscore)), msg)
 else:
